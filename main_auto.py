@@ -1,4 +1,6 @@
 import torch
+import os
+import json
 from torchvision import datasets, transforms
 import random
 import matplotlib.pyplot as plt
@@ -8,10 +10,10 @@ AUGMENT_DATASET = False
 TRANSFORM_DATASET = False
 
 ### Hyperparameters ###
-BATCH_SIZE = 32
+BATCH_SIZE = 64
 LEARNING_RATE = 0.001
 MOMENTUM = 0.9
-EPOCHS = 10
+EPOCHS = 30
 
 # Funzione per creare coppie di immagini e etichettarli con "maggiore", "minore" o "uguale"
 def create_image_pairs(dataset):
@@ -37,7 +39,6 @@ def create_image_pairs(dataset):
         labels.append(relation_label)
 
     return image_pairs, labels
-
 # Dataset personalizzato per gestire le coppie di immagini
 class MNISTPairDataset(torch.utils.data.Dataset):
     def __init__(self, dataset):
@@ -125,11 +126,9 @@ def show_dataset(dataset, num_images=5):
 # Definisci la funzione per aggiungere rumore gaussiano
 def add_gaussian_noise(tensor, mean=0.0, std=0.05):
     return tensor + std * torch.randn_like(tensor) + mean
-
 # Definisci la funzione per invertire i colori
 def invert_colors(tensor):
     return 1 - tensor
-
 # Trasformo le immagini in tensori e normalizzo i valori secondo le statiche del dataset MNIST
 transform_norm = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))])
 
@@ -174,7 +173,6 @@ train_loader = torch.utils.data.DataLoader(
                             batch_size=BATCH_SIZE,
                             shuffle=True)
 
-
 test_dataset = datasets.MNIST(root='./data', train=False, download=True, transform=transform_norm)
 
 test_pair_dataset = MNISTPairDataset(test_dataset)
@@ -182,7 +180,8 @@ test_loader = torch.utils.data.DataLoader(test_pair_dataset, batch_size=BATCH_SI
 
 total_test_size = len(test_dataset)
 
-validation_split = 0.8
+# Percentuale di suddivisione per il validation set 70% train, 30% validation   
+validation_split = 0.3
 validation_size = int(total_test_size * validation_split)
 test_size = total_test_size - validation_size
 
@@ -193,14 +192,13 @@ test_subset, validation_subset = torch.utils.data.random_split(test_pair_dataset
 test_loader = torch.utils.data.DataLoader(test_subset, batch_size=BATCH_SIZE, shuffle=False)
 validation_loader = torch.utils.data.DataLoader(validation_subset, batch_size=BATCH_SIZE, shuffle=False)
 
-print("Size train: ", len(train_loader), " Size test: ", len(test_loader), " Size validation: ", len(validation_loader))
-
+print("Size train_loader: ", len(train_loader), " Size train_dataset: ", len(train_pair_dataset))
+print("Size validation_loader: ", len(validation_loader), " Size validation_dataset: ", len(validation_subset))
+print("Size test_loader: ", len(test_loader), " Size test_dataset: ", len(test_subset))
 if PRINT_IMG:
     show_dataset(train_loader, 10)
-
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(device)
-
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -232,44 +230,6 @@ import torch.optim as optim
 
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=MOMENTUM)
-train_accuracies = []
-val_accuracies = []
-train_losses = []
-val_losses = []
-
-for epoch in range(EPOCHS):
-    model.train()
-    correct_train = 0
-    total_train = 0
-    running_loss = 0.0
-
-    for i, data in enumerate(train_loader):
-        images, labels = data
-        images, labels = images.to(device), labels.to(device)
-
-        optimizer.zero_grad()
-
-        outputs = model(images)
-        _, predicted = torch.max(outputs, 1)
-
-        correct_train += (predicted == labels).sum().item()
-        total_train += labels.size(0)
-
-        loss = criterion(outputs, labels)
-        loss.backward()
-        optimizer.step()
-
-        running_loss += loss.item()
-
-
-    train_loss = running_loss / len(train_loader)
-    train_losses.append(train_loss)
-    train_accuracy = 100 * correct_train / total_train
-    train_accuracies.append(train_accuracy)
-
-    print(f'Epoch [{epoch+1}/{EPOCHS}], Train Loss: {train_loss:.4f}, Train Accuracy: {train_accuracy:.2f}%')
-
-print('Finished Training')
 
 # define train and test functions
 from tqdm import tqdm
@@ -345,21 +305,7 @@ def validate(valid_data_loader, model):
         # update the loss value beside the progress bar for each iteration
         prog_bar.set_description(desc=f"Loss: {loss_value:.4f}")
     return loss_value, 100 * correct / total, val_loss_list, val_accuracy_list
-def evaluate_model(model, dataloader, device):
-    model.eval()  # Imposta il modello in modalità valutazione (disattiva dropout/batch norm)
-    correct = 0
-    total = 0
-    with torch.no_grad():  # Disabilita il calcolo dei gradienti per velocizzare il processo
-        for images, labels in dataloader:
-            images, labels = images.to(device), labels.to(device)
 
-            outputs = model(images)
-            _, predicted = torch.max(outputs.data, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
-
-    accuracy = 100 * correct / total
-    return accuracy
 # TRAIN!!!
 import time
 model.train()
@@ -391,8 +337,6 @@ for epoch in range(EPOCHS):
         end = time.time()
         print(f"Took {((end - start) / 60):.3f} minutes for epoch {epoch+1}")
 
-validation_accuracy = evaluate_model(model, validation_loader, device)
-print(f'Validation Accuracy: {validation_accuracy:.2f}%')
 def show_predictions(model, dataloader, num_images=5):
     model.eval()
     dataiter = iter(dataloader)
@@ -493,11 +437,6 @@ def classification_metrics(model, dataloader, device):
 # Stampa il report delle metriche
 classification_metrics(model, test_loader, device)
 
-#Precision: Il numero di veri positivi diviso per il numero di esempi che sono stati predetti come positivi.
-#Recall (Sensibilità): Il numero di veri positivi diviso per il numero di esempi che appartengono effettivamente alla classe positiva.
-#F1-Score: La media armonica tra precisione e recall. È utile quando hai un dataset squilibrato.
-#Support: Il numero di campioni effettivi per ogni classe.
-
 # Plot della loss per epoca
 plt.figure(figsize=(8, 6))
 plt.plot(train_losses, label='Train Loss')
@@ -518,3 +457,82 @@ plt.title('Accuracy per Epoch')
 plt.legend()
 plt.show()
 
+
+# Funzione per eseguire un esperimento con set specifici di iperparametri
+def run_experiment(learning_rate, momentum, epochs, batch_size):
+    # Imposta l'ottimizzatore con gli iperparametri dinamici
+    optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=momentum)
+    
+    train_losses = []
+    val_losses = []
+    train_accuracies = []
+    val_accuracies = []
+
+    total_train_loss = []
+    total_train_acc = []
+    total_val_loss = []
+    total_val_acc = []
+
+    # Ciclo di training e validazione
+    for epoch in range(epochs):
+        print(f"\nEPOCH {epoch+1} of {epochs} with LR={learning_rate} Momentum={momentum}")
+
+        # Training e validazione
+        train_loss, train_acc, train_loss_list, train_acc_list = train(train_loader, model)
+        val_loss, val_acc, val_loss_list, val_acc_list = validate(test_loader, model)
+        
+        train_losses.append(train_loss)
+        val_losses.append(val_loss)
+        train_accuracies.append(train_acc)
+        val_accuracies.append(val_acc)
+        total_train_loss.extend(train_loss_list)
+        total_train_acc.extend(train_acc_list)
+        total_val_loss.extend(val_loss_list)
+        total_val_acc.extend(val_acc_list)
+
+        print(f"Epoch #{epoch+1} train loss: {train_loss:.3f} train accuracy: {train_acc:.2f}")
+        print(f"Epoch #{epoch+1} validation loss: {val_loss:.3f} validation accuracy: {val_acc:.2f}")
+    
+    # Calcola l'accuratezza finale sul validation set
+    validation_accuracy = evaluate_model(model, validation_loader, device)
+    print(f'Validation Accuracy: {validation_accuracy:.2f}%')
+    
+    # Salva il modello con nome basato sugli iperparametri
+    model_filename = f'model_lr_{learning_rate}_momentum_{momentum}_epochs_{epochs}.pth'
+    torch.save(model.state_dict(), os.path.join('saved_models', model_filename))
+
+    # Salva i risultati dell'esperimento
+    experiment_log = {
+        'learning_rate': learning_rate,
+        'momentum': momentum,
+        'epochs': epochs,
+        'batch_size': batch_size,
+        'train_accuracy': train_accuracies,
+        'val_accuracy': val_accuracies,
+        'train_loss': train_losses,
+        'val_loss': val_losses,
+        'final_validation_accuracy': validation_accuracy
+    }
+
+    with open(f'experiment_log_lr_{learning_rate}_momentum_{momentum}_epochs_{epochs}.json', 'w') as f:
+        json.dump(experiment_log, f)
+
+    print(f'Model saved as {model_filename}')
+    print(f'Experiment log saved as experiment_log_lr_{learning_rate}_momentum_{momentum}_epochs_{epochs}.json')
+
+
+# Ciclo per provare diversi set di iperparametri
+learning_rates = [0.001, 0.01]
+momentums = [0.9, 0.95]
+batch_sizes = [32, 64]
+epochs = 5  # Ridotto per velocizzare il testing, puoi aumentare
+
+for lr in learning_rates:
+    for momentum in momentums:
+        for batch_size in batch_sizes:
+            print(f"Starting experiment with LR={lr}, Momentum={momentum}, Batch Size={batch_size}")
+            # Ricarica il modello prima di ogni nuovo esperimento
+            model = CustomLeNet5().to(device)
+            
+            # Esegui l'esperimento con gli iperparametri specificati
+            run_experiment(lr, momentum, epochs, batch_size)
