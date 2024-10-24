@@ -1,19 +1,17 @@
 import torch
-import os
-import json
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
 from torchvision import datasets, transforms
 import random
 import matplotlib.pyplot as plt
-
-PRINT_IMG = True
-AUGMENT_DATASET = False
-TRANSFORM_DATASET = False
-
-### Hyperparameters ###
-BATCH_SIZE = 64
-LEARNING_RATE = 0.001
-MOMENTUM = 0.9
-EPOCHS = 30
+import seaborn as sns
+from sklearn.metrics import confusion_matrix, classification_report
+import numpy as np
+from tqdm import tqdm
+import time
+import os
+import json
 
 # Funzione per creare coppie di immagini e etichettarli con "maggiore", "minore" o "uguale"
 def create_image_pairs(dataset):
@@ -39,6 +37,7 @@ def create_image_pairs(dataset):
         labels.append(relation_label)
 
     return image_pairs, labels
+
 # Dataset personalizzato per gestire le coppie di immagini
 class MNISTPairDataset(torch.utils.data.Dataset):
     def __init__(self, dataset):
@@ -126,81 +125,10 @@ def show_dataset(dataset, num_images=5):
 # Definisci la funzione per aggiungere rumore gaussiano
 def add_gaussian_noise(tensor, mean=0.0, std=0.05):
     return tensor + std * torch.randn_like(tensor) + mean
+
 # Definisci la funzione per invertire i colori
 def invert_colors(tensor):
     return 1 - tensor
-# Trasformo le immagini in tensori e normalizzo i valori secondo le statiche del dataset MNIST
-transform_norm = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))])
-
-# Applico data augmentation sul dataset di training
-transform_augmented = transforms.Compose([
-    transforms.RandomAffine(degrees=20, translate=(0.1, 0.1), scale=(0.8, 1.2)),
-    transforms.ToTensor(),
-    transforms.RandomChoice([
-        transforms.Lambda(lambda x: add_gaussian_noise(x)),
-        transforms.Lambda(lambda x: invert_colors(x)),
-        transforms.Lambda(lambda x: x),
-    ]),
-    transforms.Normalize((0.1307,), (0.3081,))
-])
-
-if not TRANSFORM_DATASET and not AUGMENT_DATASET:
-    train_dataset = datasets.MNIST(root='./data', train=True, download=True,
-                               transform=transform_norm)
-
-    train_pair_dataset = MNISTPairDataset(train_dataset)
-
-    print(f"Dimensione del dataset originale: {len(train_pair_dataset)}")
-
-if TRANSFORM_DATASET:
-    train_dataset_transformed = datasets.MNIST(root='./data', train=True, download=True,
-                                                transform=transform_augmented)
-    
-    train_pair_dataset = MNISTPairDataset(train_dataset_transformed)
-    print(f"Dimensione del dataset trasformato: {len(train_pair_dataset)}")
-
-if AUGMENT_DATASET:
-    train_dataset_augmented = datasets.MNIST(root='./data', train=True, download=True,
-                                                transform=transform_augmented)
-    train_pair_dataset_augmented = MNISTPairDataset(train_dataset_augmented)
-    train_pair_dataset = torch.utils.data.ConcatDataset([train_pair_dataset, train_pair_dataset_augmented])
-
-    print(f"Dimensione del dataset aumentato: {len(train_pair_dataset_augmented)}")
-    print(f"Dimensione del dataset combinato: {len(train_pair_dataset)}")
-
-train_loader = torch.utils.data.DataLoader(
-                            train_pair_dataset,
-                            batch_size=BATCH_SIZE,
-                            shuffle=True)
-
-test_dataset = datasets.MNIST(root='./data', train=False, download=True, transform=transform_norm)
-
-test_pair_dataset = MNISTPairDataset(test_dataset)
-test_loader = torch.utils.data.DataLoader(test_pair_dataset, batch_size=BATCH_SIZE, shuffle=False)
-
-total_test_size = len(test_dataset)
-
-# Percentuale di suddivisione per il validation set 70% train, 30% validation   
-validation_split = 0.3
-validation_size = int(total_test_size * validation_split)
-test_size = total_test_size - validation_size
-
-# Suddividi il dataset di test
-test_subset, validation_subset = torch.utils.data.random_split(test_pair_dataset, [test_size, validation_size])
-
-# Crea i DataLoader per il test set e il validation set
-test_loader = torch.utils.data.DataLoader(test_subset, batch_size=BATCH_SIZE, shuffle=False)
-validation_loader = torch.utils.data.DataLoader(validation_subset, batch_size=BATCH_SIZE, shuffle=False)
-
-print("Size train_loader: ", len(train_loader), " Size train_dataset: ", len(train_pair_dataset))
-print("Size validation_loader: ", len(validation_loader), " Size validation_dataset: ", len(validation_subset))
-print("Size test_loader: ", len(test_loader), " Size test_dataset: ", len(test_subset))
-if PRINT_IMG:
-    show_dataset(train_loader, 10)
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-print(device)
-import torch.nn as nn
-import torch.nn.functional as F
 
 class CustomLeNet5(nn.Module):
     def __init__(self):
@@ -221,18 +149,6 @@ class CustomLeNet5(nn.Module):
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
         return x
-
-model = CustomLeNet5()
-print(model)
-
-# define Loss and Optimizer
-import torch.optim as optim
-
-criterion = nn.CrossEntropyLoss()
-optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=MOMENTUM)
-
-# define train and test functions
-from tqdm import tqdm
 
 def train(train_data_loader, model):
     print('Training')
@@ -306,83 +222,67 @@ def validate(valid_data_loader, model):
         prog_bar.set_description(desc=f"Loss: {loss_value:.4f}")
     return loss_value, 100 * correct / total, val_loss_list, val_accuracy_list
 
-# TRAIN!!!
-import time
-model.train()
-train_losses = []
-val_losses = []
-train_accuracies = []
-val_accuracies = []
-total_val_loss = []
-total_val_acc = []
-total_train_loss = []
-total_train_acc = []
-for epoch in range(EPOCHS):
-        print(f"\nEPOCH {epoch+1} of {EPOCHS}")
-
-        # start timer and carry out training and validation
-        start = time.time()
-        train_loss, train_acc, train_loss_list, train_acc_list = train(train_loader, model)
-        val_loss, val_acc, val_loss_list, val_acc_list = validate(test_loader, model)
-        train_losses.append(train_loss)
-        val_losses.append(val_loss)
-        train_accuracies.append(train_acc)
-        val_accuracies.append(val_acc)
-        total_train_loss.extend(train_loss_list)
-        total_train_acc.extend(train_acc_list)
-        total_val_loss.extend(val_loss_list)
-        total_val_acc.extend(val_acc_list)
-        print(f"Epoch #{epoch+1} train loss: {train_loss:.3f} train accuracy: {train_acc:.2f}")   
-        print(f"Epoch #{epoch+1} validation loss: {val_loss:.3f} validation accuracy: {val_acc:.2f}")   
-        end = time.time()
-        print(f"Took {((end - start) / 60):.3f} minutes for epoch {epoch+1}")
-
-def show_predictions(model, dataloader, num_images=5):
+def show_incorrect_predictions(model, dataloader, num_images=5):
     model.eval()
-    dataiter = iter(dataloader)
-    images, labels = next(dataiter)
+    all_images = []
+    all_labels = []
+    all_preds = []
 
+    # Itera su tutti i batch nel dataloader
     with torch.no_grad():
-        outputs = model(images.to(device))
-        _, predicted = torch.max(outputs, 1)
+        for images, labels in dataloader:
+            outputs = model(images.to(device))
+            _, predicted = torch.max(outputs, 1)
+            
+            all_images.append(images.cpu())
+            all_labels.append(labels.cpu())
+            all_preds.append(predicted.cpu())
 
-    images = images.cpu()
+    # Concatena tutti i batch raccolti
+    all_images = torch.cat(all_images)
+    all_labels = torch.cat(all_labels)
+    all_preds = torch.cat(all_preds)
 
-    # Visualizza le immagini con le previsioni
+    # Trova gli indici delle previsioni errate
+    incorrect_predictions = (all_preds != all_labels).nonzero(as_tuple=True)[0]
+
+    print(f"{len(incorrect_predictions)} previsioni errate trovate.")
+
+    if len(incorrect_predictions) == 0:
+        print("Nessuna previsione errata trovata.")
+        return
+
+    # Limita il numero di immagini errate da mostrare
+    num_images = min(num_images, len(incorrect_predictions))
+
     fig, axes = plt.subplots(num_images, 3, figsize=(6, num_images * 2))
     relation_labels = {0: 'A > B', 1: 'A < B', 2: 'A = B'}
     
-    for i in range(num_images):
-        img_A = images[i][0, :, :]
-        img_B = images[i][1, :, :]
-        pred_label = predicted[i].item()
-        true_label = labels[i].item()
+    for idx, i in enumerate(incorrect_predictions[:num_images]):
+        img_A = all_images[i][0, :, :]
+        img_B = all_images[i][1, :, :]
+        pred_label = all_preds[i].item()
+        true_label = all_labels[i].item()
 
         # Mostra l'immagine A
-        axes[i, 0].imshow(img_A, cmap='gray')
-        axes[i, 0].set_title('Image A')
-        axes[i, 0].axis('off')
+        axes[idx, 0].imshow(img_A, cmap='gray')
+        axes[idx, 0].set_title('Image A')
+        axes[idx, 0].axis('off')
 
         # Mostra l'etichetta di relazione prevista e reale
-        axes[i, 1].text(0.5, 0.5, f'Pred: {relation_labels[pred_label]}\nTrue: {relation_labels[true_label]}', 
-                        fontsize=12, ha='center', va='center')
-        axes[i, 1].axis('off')
+        axes[idx, 1].text(0.5, 0.5, f'Pred: {relation_labels[pred_label]}\nTrue: {relation_labels[true_label]}', 
+                          fontsize=12, ha='center', va='center')
+        axes[idx, 1].axis('off')
 
         # Mostra l'immagine B
-        axes[i, 2].imshow(img_B, cmap='gray')
-        axes[i, 2].set_title('Image B')
-        axes[i, 2].axis('off')
+        axes[idx, 2].imshow(img_B, cmap='gray')
+        axes[idx, 2].set_title('Image B')
+        axes[idx, 2].axis('off')
 
     plt.tight_layout()
     plt.show()
 
-# Visualizza alcune previsioni
-show_predictions(model, test_loader, num_images=5)
-
-from sklearn.metrics import confusion_matrix, classification_report
-import seaborn as sns
-
-# Funzione per calcolare e stampare la matrice di confusione
+# Funzione per calcolare e stampare la matrice di confusione normalizzata
 def plot_confusion_matrix(model, dataloader, device):
     model.eval()
     all_preds = []
@@ -402,17 +302,19 @@ def plot_confusion_matrix(model, dataloader, device):
     # Crea la matrice di confusione
     cm = confusion_matrix(all_labels, all_preds)
     
-    # Visualizza la matrice di confusione
+    # Normalizza la matrice di confusione
+    cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]  # Normalizza per ogni riga (classe vera)
+    
+    # Visualizza la matrice di confusione normalizzata in percentuale
     plt.figure(figsize=(6, 4))
-    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=['A > B', 'A < B', 'A = B'], 
+    sns.heatmap(cm_normalized * 100, annot=True, fmt=".2f", cmap="Blues", 
+                xticklabels=['A > B', 'A < B', 'A = B'], 
                 yticklabels=['A > B', 'A < B', 'A = B'])
+    
     plt.xlabel('Predicted')
     plt.ylabel('True')
-    plt.title('Confusion Matrix')
+    plt.title('Confusion Matrix (in %)')
     plt.show()
-
-# Calcola e visualizza la matrice di confusione
-plot_confusion_matrix(model, test_loader, device)
 
 def classification_metrics(model, dataloader, device):
     model.eval()
@@ -434,32 +336,8 @@ def classification_metrics(model, dataloader, device):
     report = classification_report(all_labels, all_preds, target_names=['A > B', 'A < B', 'A = B'])
     print(report)
 
-# Stampa il report delle metriche
-classification_metrics(model, test_loader, device)
-
-# Plot della loss per epoca
-plt.figure(figsize=(8, 6))
-plt.plot(train_losses, label='Train Loss')
-plt.plot(val_losses, label='Validation Loss')
-plt.xlabel('Epochs')
-plt.ylabel('Loss')
-plt.title('Loss per Epoch')
-plt.legend()
-plt.show()
-
-# Plot dell'accuratezza per epoca
-plt.figure(figsize=(8, 6))
-plt.plot(train_accuracies, label='Train Accuracy')
-plt.plot(val_accuracies, label='Validation Accuracy')
-plt.xlabel('Epochs')
-plt.ylabel('Accuracy (%)')
-plt.title('Accuracy per Epoch')
-plt.legend()
-plt.show()
-
-
 # Funzione per eseguire un esperimento con set specifici di iperparametri
-def run_experiment(learning_rate, momentum, epochs, batch_size):
+def run_experiment(learning_rate, momentum, epochs, batch_size, optimizer):
     # Imposta l'ottimizzatore con gli iperparametri dinamici
     optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=momentum)
     
@@ -479,7 +357,7 @@ def run_experiment(learning_rate, momentum, epochs, batch_size):
 
         # Training e validazione
         train_loss, train_acc, train_loss_list, train_acc_list = train(train_loader, model)
-        val_loss, val_acc, val_loss_list, val_acc_list = validate(test_loader, model)
+        val_loss, val_acc, val_loss_list, val_acc_list = validate(validation_loader, model)
         
         train_losses.append(train_loss)
         val_losses.append(val_loss)
@@ -493,9 +371,8 @@ def run_experiment(learning_rate, momentum, epochs, batch_size):
         print(f"Epoch #{epoch+1} train loss: {train_loss:.3f} train accuracy: {train_acc:.2f}")
         print(f"Epoch #{epoch+1} validation loss: {val_loss:.3f} validation accuracy: {val_acc:.2f}")
     
-    # Calcola l'accuratezza finale sul validation set
-    validation_accuracy = evaluate_model(model, validation_loader, device)
-    print(f'Validation Accuracy: {validation_accuracy:.2f}%')
+    _, test_acc, _, _ = validate(test_loader, model)
+    print(f'Test Accuracy: {test_acc:.2f}%')
     
     # Salva il modello con nome basato sugli iperparametri
     model_filename = f'model_lr_{learning_rate}_momentum_{momentum}_epochs_{epochs}.pth'
@@ -511,7 +388,7 @@ def run_experiment(learning_rate, momentum, epochs, batch_size):
         'val_accuracy': val_accuracies,
         'train_loss': train_losses,
         'val_loss': val_losses,
-        'final_validation_accuracy': validation_accuracy
+        'final_validation_accuracy': test_acc
     }
 
     with open(f'experiment_log_lr_{learning_rate}_momentum_{momentum}_epochs_{epochs}.json', 'w') as f:
@@ -521,18 +398,164 @@ def run_experiment(learning_rate, momentum, epochs, batch_size):
     print(f'Experiment log saved as experiment_log_lr_{learning_rate}_momentum_{momentum}_epochs_{epochs}.json')
 
 
-# Ciclo per provare diversi set di iperparametri
-learning_rates = [0.001, 0.01]
-momentums = [0.9, 0.95]
-batch_sizes = [32, 64]
-epochs = 5  # Ridotto per velocizzare il testing, puoi aumentare
 
-for lr in learning_rates:
-    for momentum in momentums:
-        for batch_size in batch_sizes:
-            print(f"Starting experiment with LR={lr}, Momentum={momentum}, Batch Size={batch_size}")
-            # Ricarica il modello prima di ogni nuovo esperimento
-            model = CustomLeNet5().to(device)
-            
-            # Esegui l'esperimento con gli iperparametri specificati
-            run_experiment(lr, momentum, epochs, batch_size)
+if __name__ == '__main__': 
+    PRINT_IMG = True
+    AUGMENT_DATASET = False
+    TRANSFORM_DATASET = False
+
+    # Ciclo per provare diversi set di iperparametri
+    learning_rates = [0.001, 0.005, 0.01, 0.05]
+    momentums = [0.85, 0.9, 0.95, 1]
+    batch_sizes = [16, 32, 64, 128]
+    epochs = 20 # Ridotto per velocizzare il testing, puoi aumentare
+
+    # Trasformo le immagini in tensori e normalizzo i valori secondo le statiche del dataset MNIST
+    transform_norm = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.1307,), (0.3081,))])
+
+    # Applico data augmentation sul dataset di training
+    transform_augmented = transforms.Compose([
+        transforms.RandomAffine(degrees=20, translate=(0.1, 0.1), scale=(0.8, 1.2)),
+        transforms.ToTensor(),
+        transforms.RandomChoice([
+            transforms.Lambda(lambda x: add_gaussian_noise(x)),
+            transforms.Lambda(lambda x: invert_colors(x)),
+            transforms.Lambda(lambda x: x),
+        ]),
+        transforms.Normalize((0.1307,), (0.3081,))
+    ])
+
+    if not TRANSFORM_DATASET and not AUGMENT_DATASET:
+        train_dataset = datasets.MNIST(root='./data', train=True, download=True,
+                                transform=transform_norm)
+
+        train_pair_dataset = MNISTPairDataset(train_dataset)
+
+        print(f"Dimensione del dataset originale: {len(train_pair_dataset)}")
+
+    if TRANSFORM_DATASET:
+        train_dataset_transformed = datasets.MNIST(root='./data', train=True, download=True,
+                                                    transform=transform_augmented)
+        
+        train_pair_dataset = MNISTPairDataset(train_dataset_transformed)
+        print(f"Dimensione del dataset trasformato: {len(train_pair_dataset)}")
+
+    if AUGMENT_DATASET:
+        train_dataset_augmented = datasets.MNIST(root='./data', train=True, download=True,
+                                                    transform=transform_augmented)
+        train_pair_dataset_augmented = MNISTPairDataset(train_dataset_augmented)
+        train_pair_dataset = torch.utils.data.ConcatDataset([train_pair_dataset, train_pair_dataset_augmented])
+
+        print(f"Dimensione del dataset aumentato: {len(train_pair_dataset_augmented)}")
+        print(f"Dimensione del dataset combinato: {len(train_pair_dataset)}")
+
+    test_dataset = datasets.MNIST(root='./data', train=False, download=True, transform=transform_norm)
+
+    test_pair_dataset = MNISTPairDataset(test_dataset)
+    test_loader = torch.utils.data.DataLoader(test_pair_dataset, batch_size=BATCH_SIZE, shuffle=False)
+
+    total_test_size = len(test_dataset)
+
+    # Percentuale di suddivisione per il validation set 70% train, 30% validation   
+    validation_split = 0.3
+    validation_size = int(total_test_size * validation_split)
+    test_size = total_test_size - validation_size
+
+    # Suddividi il dataset di test
+    test_subset, validation_subset = torch.utils.data.random_split(test_pair_dataset, [test_size, validation_size])
+
+    # Crea i DataLoader per il test set e il validation set
+    test_loader = torch.utils.data.DataLoader(test_subset, batch_size=BATCH_SIZE, shuffle=False)
+    validation_loader = torch.utils.data.DataLoader(validation_subset, batch_size=BATCH_SIZE, shuffle=False)
+
+    print("Size train_loader: ", len(train_loader), " Size train_dataset: ", len(train_pair_dataset))
+    print("Size validation_loader: ", len(validation_loader), " Size validation_dataset: ", len(validation_subset))
+    print("Size test_loader: ", len(test_loader), " Size test_dataset: ", len(test_subset))
+
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    print(device)
+
+    model = CustomLeNet5()
+    print(model)
+
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=MOMENTUM)
+
+    for lr in learning_rates:
+        for momentum in momentums:
+            for batch_size in batch_sizes:
+                print(f"Starting experiment with LR={lr}, Momentum={momentum}, Batch Size={batch_size}")
+                train_loader = torch.utils.data.DataLoader(
+                                train_pair_dataset,
+                                batch_size=batch_size,
+                                shuffle=True)
+                # Ricarica il modello prima di ogni nuovo esperimento
+                model = CustomLeNet5().to(device)
+                
+                # Esegui l'esperimento con gli iperparametri specificati
+                run_experiment(lr, momentum, epochs, batch_size)
+    
+    '''
+    if PRINT_IMG:
+        show_dataset(train_loader, 10)
+
+    model.train()
+    train_losses = []
+    val_losses = []
+    train_accuracies = []
+    val_accuracies = []
+    total_val_loss = []
+    total_val_acc = []
+    total_train_loss = []
+    total_train_acc = []
+    for epoch in range(EPOCHS):
+            print(f"\nEPOCH {epoch+1} of {EPOCHS}")
+
+            # start timer and carry out training and validation
+            start = time.time()
+            train_loss, train_acc, train_loss_list, train_acc_list = train(train_loader, model)
+            val_loss, val_acc, val_loss_list, val_acc_list = validate(test_loader, model)
+            train_losses.append(train_loss)
+            val_losses.append(val_loss)
+            train_accuracies.append(train_acc)
+            val_accuracies.append(val_acc)
+            total_train_loss.extend(train_loss_list)
+            total_train_acc.extend(train_acc_list)
+            total_val_loss.extend(val_loss_list)
+            total_val_acc.extend(val_acc_list)
+            print(f"Epoch #{epoch+1} train loss: {train_loss:.3f} train accuracy: {train_acc:.2f}")   
+            print(f"Epoch #{epoch+1} validation loss: {val_loss:.3f} validation accuracy: {val_acc:.2f}")   
+            end = time.time()
+            print(f"Took {((end - start) / 60):.3f} minutes for epoch {epoch+1}")
+
+    # Visualizza alcune previsioni errate
+    show_incorrect_predictions(model, validation_loader, num_images=5)
+
+    # Calcola e visualizza la matrice di confusione
+    plot_confusion_matrix(model, test_loader, device)
+
+    # Stampa il report delle metriche
+    classification_metrics(model, test_loader, device)
+
+    # Plot della loss per epoca
+    plt.figure(figsize=(8, 6))
+    plt.plot(train_losses, label='Train Loss')
+    plt.plot(val_losses, label='Validation Loss')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.title('Loss per Epoch')
+    plt.legend()
+    plt.show()
+
+    # Plot dell'accuratezza per epoca
+    plt.figure(figsize=(8, 6))
+    plt.plot(train_accuracies, label='Train Accuracy')
+    plt.plot(val_accuracies, label='Validation Accuracy')
+    plt.xlabel('Epochs')
+    plt.ylabel('Accuracy (%)')
+    plt.title('Accuracy per Epoch')
+    plt.legend()
+    plt.show()
+    '''
