@@ -42,7 +42,7 @@ log_bs=128_lr=0.01_e=30_m=0.9_aug=False_tra=False_opt=SGD leggero overfit, loss 
 log_bs=128_lr=0.01_e=50_m=0.9_aug=False_tra=False forse overfit, loss val oscillante 95,7 max acc val
 
 MODELLO MLP:
-runMLP_BS=128_LR=0.00012_MOM=0.9_EPOCHS=15_AUG=False_TRA=False_OPT=SGD Migliore con SDG
+runMLP_BS=128_LR=0.00012_MOM=0.9_EPOCHS=15_AUG=False_TRA=False_OPT=SGD Migliore con SGD
 runMLP_BS=128_LR=2.5e-05_EPOCHS=15_AUG=False_TRA=False_OPT=ADAM Migliore con ADAM
 runMLP_BS=128_LR=0.0001_MOM=0.9_EPOCHS=15_AUG=False_TRA=False_OPT=SGD
 ***AUGMENTATION le immagini di training possono essere più difficili da classificare

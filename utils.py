@@ -714,6 +714,33 @@ def inference_MLP(model, dataloader, device):
 
     return all_preds, all_labels, all_images_A, all_images_B, all_num1_preds, all_num2_preds
 
+def inference_MLPvector(model, dataloader, device):
+    model.eval()
+    all_images_A = []
+    all_images_B = []
+    all_labels = []
+    all_preds = []
+
+    # Itera su tutti i batch nel dataloader
+    with torch.no_grad():
+        for img_A, img_B, labels in dataloader:
+            img_A, img_B, labels = img_A.to(device), img_B.to(device), labels.to(device)
+
+            # Ottieni la predizione del numero per ogni immagine e la relazione
+            relation_pred = model(img_A, img_B)
+            _, predicted_relation = torch.max(relation_pred, 1)
+
+            # Aggiungi i risultati a liste
+            all_images_A.extend(img_A.cpu().numpy())
+            all_images_B.extend(img_B.cpu().numpy())
+            all_labels.extend(labels.cpu().numpy())
+            all_preds.extend(predicted_relation.cpu().numpy())
+
+    # Converti tutto in array NumPy
+    all_labels = np.array(all_labels)
+    all_preds = np.array(all_preds)
+
+    return all_preds, all_labels, all_images_A, all_images_B
 
 def show_incorrect_predictions(all_preds, all_labels, all_images_A, all_images_B, num_images=5):
     incorrect_predictions = np.where(all_preds != all_labels)[0]
@@ -860,6 +887,47 @@ def show_incorrect_predictions_MLP(all_preds, all_labels, all_images_A, all_imag
         axes[idx, 3].text(0.5, 0.5, f'Pred: {pred_num1} vs {pred_num2}\nRel: {relation_labels[pred_relation_label]}', 
                           fontsize=12, ha='center', va='center')
         axes[idx, 3].axis('off')
+
+    plt.tight_layout()
+    plt.show()
+    return fig
+
+def show_incorrect_predictions_MLPvector(all_preds, all_labels, all_images_A, all_images_B, num_images=5):
+
+    incorrect_predictions = np.where(all_preds != all_labels)[0]
+
+    print(f"{len(incorrect_predictions)} previsioni errate trovate.")
+
+    if len(incorrect_predictions) == 0:
+        print("Nessuna previsione errata trovata.")
+        return
+
+    # Limita il numero di immagini errate da mostrare
+    num_images = min(num_images, len(incorrect_predictions))
+
+    fig, axes = plt.subplots(num_images, 3, figsize=(6, num_images * 3))
+    relation_labels = {0: 'A > B', 1: 'A < B', 2: 'A = B'}
+    
+    for idx, i in enumerate(incorrect_predictions[:num_images]):
+        img_A = all_images_A[i]
+        img_B = all_images_B[i]
+        pred_label = all_preds[i]
+        true_label = all_labels[i]
+
+        # Mostra l'immagine A
+        axes[idx, 0].imshow(img_A.squeeze(), cmap='gray')
+        axes[idx, 0].set_title('Image A')
+        axes[idx, 0].axis('off')
+
+        # Mostra l'etichetta di relazione prevista e reale
+        axes[idx, 1].text(0.5, 0.5, f'Pred: {relation_labels[pred_label]}\nTrue: {relation_labels[true_label]}', 
+                          fontsize=12, ha='center', va='center', bbox=dict(facecolor='white', alpha=0.8))
+        axes[idx, 1].axis('off')
+
+        # Mostra l'immagine B
+        axes[idx, 2].imshow(img_B.squeeze(), cmap='gray')
+        axes[idx, 2].set_title('Image B')
+        axes[idx, 2].axis('off')
 
     plt.tight_layout()
     plt.show()
