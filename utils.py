@@ -17,7 +17,6 @@ from torch.utils.tensorboard import SummaryWriter
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# Funzione per creare coppie di immagini e etichettarli con "maggiore", "minore" o "uguale"
 def create_image_pairs_imbalanced(dataset):
     image_pairs = []
     labels = []
@@ -47,9 +46,9 @@ def create_image_pairs(dataset):
     labels = []
 
     max_size_class = len(dataset) // 3  # Limita il numero massimo di campioni per ciascuna classe
-    count_class_0 = 0  # Contatore per la classe A > B
-    count_class_1 = 0  # Contatore per la classe A < B
-    count_class_2 = 0  # Contatore per la classe A = B
+    count_class_0 = 0
+    count_class_1 = 0
+    count_class_2 = 0
     i = 0
     
     # Continua finché tutte le classi non sono bilanciate
@@ -148,16 +147,16 @@ def show_image_pair(img_A, img_B, relation_label):
     img_B = img_B.squeeze().numpy()
 
     # Crea una figura con due immagini, riducendo la dimensione per occupare meno spazio
-    fig, axes = plt.subplots(1, 2, figsize=(4, 4))  # Dimensioni ridotte
+    fig, axes = plt.subplots(1, 2, figsize=(4, 4))
 
     # Mostra le immagini
     axes[0].imshow(img_A, cmap='gray')
     axes[0].set_title('Image A')
-    axes[0].axis('off')  # Rimuove gli assi
+    axes[0].axis('off')
 
     axes[1].imshow(img_B, cmap='gray')
     axes[1].set_title('Image B')
-    axes[1].axis('off')  # Rimuove gli assi
+    axes[1].axis('off')
 
     # Riduce lo spazio tra i subplots
     plt.tight_layout(pad=0.5)  # Riduce il padding tra le immagini
@@ -175,7 +174,7 @@ def show_dataset(dataset, num_images=5):
     relation_labels = {0: 'A > B', 1: 'A < B', 2: 'A = B'}
 
     # Numero di righe: ogni riga contiene 1 coppia di immagini (2 colonne)
-    num_rows = num_images  # 1 coppia per riga
+    num_rows = num_images
 
     # Crea una griglia di subplots: num_rows righe, 3 colonne (Image A, Relation, Image B)
     fig, axes = plt.subplots(num_rows, 3, figsize=(6, num_rows * 2))
@@ -200,14 +199,13 @@ def show_dataset(dataset, num_images=5):
         # Mostra l'immagine B nel subplot
         axes[i, 2].imshow(img_B, cmap='gray')
         axes[i, 2].set_title('Image B')
-        axes[i, 2].axis('off')  # Nascondi gli assi
+        axes[i, 2].axis('off')
 
     # Applica il layout compatto per ridurre lo spazio tra i subplot
     plt.tight_layout(pad=0.5)
     plt.show()
     return fig
 
-# Funzione per visualizzare più coppie di immagini in un'unica figura
 def show_dataset_MLP(dataset, num_images=5):
     dataiter = iter(dataset)
     imgs_A, imgs_B, labels = next(dataiter)
@@ -216,7 +214,7 @@ def show_dataset_MLP(dataset, num_images=5):
     relation_labels = {0: 'A > B', 1: 'A < B', 2: 'A = B'}
 
     # Numero di righe: ogni riga contiene 1 coppia di immagini (2 colonne)
-    num_rows = num_images  # 1 coppia per riga
+    num_rows = num_images
 
     # Crea una griglia di subplots: num_rows righe, 3 colonne (Image A, Relation, Image B)
     fig, axes = plt.subplots(num_rows, 3, figsize=(6, num_rows * 2))
@@ -240,7 +238,7 @@ def show_dataset_MLP(dataset, num_images=5):
         # Mostra l'immagine B nel subplot
         axes[i, 2].imshow(img_B, cmap='gray')
         axes[i, 2].set_title('Image B')
-        axes[i, 2].axis('off')  # Nascondi gli assi
+        axes[i, 2].axis('off')
 
     # Applica il layout compatto per ridurre lo spazio tra i subplot
     plt.tight_layout(pad=0.5)
@@ -405,7 +403,7 @@ def create_train_dataset(transform_dataset=False, augment_dataset=False, augment
         transforms.Normalize((0.1307,), (0.3081,))])
 
     transform_augmented = transforms.Compose([
-        transforms.RandomAffine(degrees=20, translate=(0.1, 0.1), scale=(0.8, 1.2)),
+        transforms.RandomAffine(degrees=5, translate=(0.1, 0.1), scale=(0.8, 1.2)),
         transforms.ToTensor(),
         transforms.Resize((img_size, img_size)),
         transforms.RandomChoice([
@@ -468,7 +466,7 @@ def create_train_dataset_MLP(transform_dataset=False, augment_dataset=False, aug
         transforms.Normalize((0.1307,), (0.3081,))])
 
     transform_augmented = transforms.Compose([
-        transforms.RandomAffine(degrees=20, translate=(0.1, 0.1), scale=(0.8, 1.2)),
+        transforms.RandomAffine(degrees=5, translate=(0.1, 0.1), scale=(0.8, 1.2)),
         transforms.ToTensor(),
         transforms.Resize((img_size, img_size)),
         transforms.RandomChoice([
@@ -531,7 +529,7 @@ def create_train_dataset_imbalanced(transform_dataset=False, augment_dataset=Fal
         transforms.Normalize((0.1307,), (0.3081,))])
 
     transform_augmented = transforms.Compose([
-        transforms.RandomAffine(degrees=20, translate=(0.1, 0.1), scale=(0.8, 1.2)),
+        transforms.RandomAffine(degrees=5, translate=(0.1, 0.1), scale=(0.8, 1.2)),
         transforms.ToTensor(),
         transforms.Resize((img_size, img_size)),
         transforms.RandomChoice([

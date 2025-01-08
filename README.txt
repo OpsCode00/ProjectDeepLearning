@@ -1,3 +1,14 @@
+I modelli su cui sono state fatte più analisi sono:
+main_32x32.ipynb
+main_MLP_vector.ipynb
+
+Nel file utils.py ci sono tutte le funzioni utilizzate da tutti i modelli creati.
+
+Gli altri modelli sono stati test sperimentali per "giocare" un po' e capire il funzionamento modificando alcune cose.
+
+-------------------------------------------------------------------------------------------------
+
+Questi sono alcuni appunti sui test effettuati.
 MIGLIORI RUN
 MODELLO 32x32:
 run32x32_BS=128_LR=0.001_EPOCHS=30_AUG=False_TRA=False_OPT=ADAM_1 Buona run, appena oscillante la loss
@@ -51,4 +62,8 @@ runMLP_BS=128_LR=0.001_MOM=0.9_EPOCHS=15_AUG=True_TRA=False_OPT=SGD Questa run c
 runMLP_BS=128_LR=2.5e-05_EPOCHS=15_AUG=True_TRA=False_OPT=ADAM Idem per sopra, si comporta meglio quindi era troppo potente la data augmentation
 Con gli stessi iperparametri ma il dataset augmentato si ottengono comportamenti strani
 runMLP_BS=128_LR=2.5e-05_EPOCHS=15_AUG=True_TRA=False_OPT=ADAM 
-runMLP_BS=128_LR=0.00012_MOM=0.9_EPOCHS=15_AUG=True_TRA=False_OPT=SGD 
+runMLP_BS=128_LR=0.00012_MOM=0.9_EPOCHS=15_AUG=True_TRA=False_OPT=SGD
+
+MODELLO MLPvector:
+runMLPvector_BS=128_LR=0.01_MOM=0.9_EPOCHS=15_AUG=False_TRA=False_OPT=SGD migliore
+runMLPvector_BS=128_LR=0.01_MOM=0.9_EPOCHS=15_AUG=True_TRA=False_OPT=SGD.ipynb_1 con Augmentation ma senza invertire i Bianco-nero
